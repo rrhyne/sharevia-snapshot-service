@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identifier -->
+    <key>Label</key>
+    <string>com.sharevia.snapshot</string>
+    
+    <!-- Program to run -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/robrhyne/Sites/sharevia/sharevia_snapshot_service/main.py</string>
+    </array>
+    
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/robrhyne/Sites/sharevia/sharevia_snapshot_service</string>
+    
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>/Users/robrhyne/Sites/sharevia/sharevia_snapshot_service</string>
+        <!-- Poll every 60 seconds -->
+        <key>SNAPSHOT_POLL_INTERVAL</key>
+        <string>60</string>
+    </dict>
+    
+    <!-- Run at load (start immediately) -->
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <!-- Keep alive - restart if it crashes -->
+    <key>KeepAlive</key>
+    <true/>
+    
+    <!-- Logs -->
+    <key>StandardOutPath</key>
+    <string>/Users/robrhyne/Sites/sharevia/sharevia_snapshot_service/logs/snapshot-service.out.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/Users/robrhyne/Sites/sharevia/sharevia_snapshot_service/logs/snapshot-service.err.log</string>
+    
+    <!-- Throttle interval to prevent rapid restarts -->
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+</dict>
+</plist>
