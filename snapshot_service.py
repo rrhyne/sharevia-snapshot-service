@@ -81,7 +81,6 @@ def process_snapshot_for_bookmark(bookmark_id, snapshot_id, url):
 
     if not results:
         logger.warning(f"⚠️  No results available for snapshot {snapshot_id}")
-        return False
     else:
         # Process the first result (should only be one for the URL)
         result_data = results[0] if isinstance(results, list) else results
