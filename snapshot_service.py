@@ -113,6 +113,41 @@ def process_snapshot_for_bookmark(bookmark_id, snapshot_id, url):
         return False
 
 
+def poll_snapshots_once():
+    """
+    Run one polling cycle - check bookmarks for pending snapshots and process them.
+    Does not sleep - that's handled by the caller.
+    """
+    # Get bookmarks that have snapshot_ids (pending async scrapes)
+    bookmarks = supabase_client.get_bookmarks_with_snapshots()
+
+    if not bookmarks:
+        logger.info("No pending snapshots found")
+        return
+
+    logger.info(f"🔍 Found {len(bookmarks)} bookmark(s) with pending snapshot(s)")
+
+    # Process each bookmark's snapshot
+    for bookmark in bookmarks:
+        bookmark_id = bookmark.get("id")
+        snapshot_id = bookmark.get("snapshot_id")
+        url = bookmark.get("url")
+
+        if not snapshot_id:
+            logger.warning(f"Bookmark {bookmark_id} has no snapshot_id, skipping")
+            continue
+
+        try:
+            success = process_snapshot_for_bookmark(bookmark_id, snapshot_id, url)
+
+            if not success:
+                logger.warning(f"⚠️  Failed to process snapshot {snapshot_id}")
+
+        except Exception as e:
+            logger.error(f"Error processing bookmark {bookmark_id}: {e}", exc_info=True)
+            continue
+
+
 def poll_snapshots(poll_interval=60, max_iterations=None):
     """
     Main polling loop - checks bookmarks for pending snapshots and processes them.
@@ -135,44 +170,7 @@ def poll_snapshots(poll_interval=60, max_iterations=None):
             break
 
         try:
-            # Get bookmarks that have snapshot_ids (pending async scrapes)
-            bookmarks = supabase_client.get_bookmarks_with_snapshots()
-
-            if not bookmarks:
-                # No pending snapshots - silent poll
-                time.sleep(poll_interval)
-                continue
-
-            logger.info(
-                f"🔍 Found {len(bookmarks)} bookmark(s) with pending snapshot(s)"
-            )
-
-            # Process each bookmark's snapshot
-            for bookmark in bookmarks:
-                bookmark_id = bookmark.get("id")
-                snapshot_id = bookmark.get("snapshot_id")
-                url = bookmark.get("url")
-
-                if not snapshot_id:
-                    logger.warning(
-                        f"Bookmark {bookmark_id} has no snapshot_id, skipping"
-                    )
-                    continue
-
-                try:
-                    success = process_snapshot_for_bookmark(
-                        bookmark_id, snapshot_id, url
-                    )
-
-                    if not success:
-                        logger.warning(f"⚠️  Failed to process snapshot {snapshot_id}")
-
-                except Exception as e:
-                    logger.error(
-                        f"Error processing bookmark {bookmark_id}: {e}", exc_info=True
-                    )
-                    continue
-
+            poll_snapshots_once()
             time.sleep(poll_interval)
 
         except KeyboardInterrupt:

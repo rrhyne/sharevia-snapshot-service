@@ -1,47 +1,34 @@
 #!/usr/bin/env python3
 """
-Sharevia Snapshot Service - Main Entry Point
+Sharevia Snapshot Service - Worker
 
 Polls Brightdata for snapshot results and updates bookmarks in Supabase.
-Runs a Flask web server on port 8081 for health checks while polling in background.
+Runs as a worker process with a maximum runtime before exiting.
 """
 
 import logging
 import os
 import sys
-import threading
+import time
 
 import brightdata_client
 import snapshot_service
 from dotenv import load_dotenv
-from flask import Flask, jsonify
 
 # Load environment variables
 load_dotenv()
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-
-logger = logging.getLogger(__name__)
-
-# Create Flask app for health checks
-app = Flask(__name__)
+logger = logging.getLogger("snapshot-worker")
 
 
-@app.route("/")
-def health_check():
-    """Health check endpoint for Digital Ocean"""
-    return jsonify({"status": "ok", "service": "snapshot-service"}), 200
-
-
-@app.route("/health")
-def health():
-    """Alternative health check endpoint"""
-    return jsonify({"status": "healthy", "service": "snapshot-service"}), 200
+def setup_logging():
+    """Configure logging for the worker"""
+    log_format = '%(name)s - %(levelname)s - %(message)s'
+    logging.basicConfig(
+        level=logging.INFO,
+        format=log_format,
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
 
 
 def validate_environment():
@@ -63,21 +50,17 @@ def validate_environment():
     return True
 
 
-def run_polling_service():
-    """Run the snapshot polling service in a background thread"""
-    poll_interval = int(os.getenv("SNAPSHOT_POLL_INTERVAL", "30"))
-    logger.info(f"Starting polling service with {poll_interval}s interval")
+def main():
+    """Main worker loop"""
+    setup_logging()
 
-    try:
-        snapshot_service.poll_snapshots(poll_interval=poll_interval)
-    except Exception as e:
-        logger.error(f"Polling service error: {e}", exc_info=True)
-
-
-if __name__ == "__main__":
+    # Maximum runtime in seconds (5 minutes = 300 seconds)
+    MAX_PROC_RUNTIME_IN_SECONDS = int(os.getenv("MAX_RUNTIME_SECONDS", "300"))
+    
     logger.info("=" * 60)
-    logger.info("Sharevia Snapshot Service Starting")
+    logger.info("Sharevia Snapshot Worker Starting")
     logger.info("=" * 60)
+    logger.info("Max runtime: %d seconds", MAX_PROC_RUNTIME_IN_SECONDS)
 
     # Validate environment
     if not validate_environment():
@@ -86,17 +69,40 @@ if __name__ == "__main__":
     # Get poll interval from environment or use default
     poll_interval = int(os.getenv("SNAPSHOT_POLL_INTERVAL", "30"))
 
-    logger.info(f"Configuration:")
-    logger.info(f"  - Poll interval: {poll_interval} seconds")
-    logger.info(f"  - Brightdata API: {brightdata_client.BASE_URL}")
-    logger.info(f"  - Supabase Project: {os.getenv('SUPABASE_PROJECT_REF')}")
-    logger.info(f"  - Web server: 0.0.0.0:8081")
+    logger.info("Configuration:")
+    logger.info("  - Poll interval: %d seconds", poll_interval)
+    logger.info("  - Brightdata API: %s", brightdata_client.BASE_URL)
+    logger.info("  - Supabase Project: %s", os.getenv('SUPABASE_PROJECT_REF'))
 
-    # Start the polling service in a background thread
-    polling_thread = threading.Thread(target=run_polling_service, daemon=True)
-    polling_thread.start()
-    logger.info("Polling service started in background thread")
+    proc_runtime_in_secs = 0
 
-    # Start Flask web server for health checks
-    logger.info("Starting web server on port 8081...")
-    app.run(host="0.0.0.0", port=8081, debug=False)
+    while proc_runtime_in_secs < MAX_PROC_RUNTIME_IN_SECONDS:
+        logger.info("Worker running for %d seconds", proc_runtime_in_secs)
+
+        start = time.monotonic()
+
+        try:
+            logger.info("Polling for snapshots...")
+            # Run one iteration of snapshot polling
+            snapshot_service.poll_snapshots_once()
+            logger.info("Polling cycle complete")
+        except Exception as e:
+            logger.error("Error during polling cycle: %s", e, exc_info=True)
+
+        end = time.monotonic()
+        elapsed = end - start
+
+        proc_runtime_in_secs += elapsed
+
+        # If we haven't exceeded max runtime, sleep until next poll
+        if proc_runtime_in_secs < MAX_PROC_RUNTIME_IN_SECONDS:
+            sleep_time = min(poll_interval, MAX_PROC_RUNTIME_IN_SECONDS - proc_runtime_in_secs)
+            logger.info("Sleeping for %d seconds before next poll", sleep_time)
+            time.sleep(sleep_time)
+            proc_runtime_in_secs += sleep_time
+
+    logger.info("Exceeded max runtime (%d seconds). Exiting gracefully", MAX_PROC_RUNTIME_IN_SECONDS)
+
+
+if __name__ == "__main__":
+    main()
