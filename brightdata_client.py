@@ -51,6 +51,16 @@ def get_snapshots():
         return []
 
 
+def check_download_for_errors(response_data):
+    if isinstance(response_data, list) and len(response_data) > 0:
+        for item in response_data:
+            if "error" in item:
+                logging.error(f"Error found: {item['error']}")
+                logging.error(f"Error code: {item.get('error_code', 'N/A')}")
+                return True
+    return False
+
+
 def download_snapshot_results(snapshot_id):
     """
     Download results from a ready snapshot.
@@ -61,25 +71,18 @@ def download_snapshot_results(snapshot_id):
     Returns:
         list: List of scraped results, or None if failed
     """
-    url = f"{BASE_URL}/snapshot/{snapshot_id}"
-    params = {"format": "json"}
+
+    DOWNLOAD_API_URL = (
+        f"https://api.brightdata.com/datasets/v3/snapshot/{snapshot_id}?format=json"
+    )
+    headers = {
+        "Authorization": f"Bearer {BRIGHTDATA_TOKEN}",
+        "Content-Type": "application/json",
+    }
 
     try:
-        logger.info(f"download_snapshot_results {url}")
-        response = requests.get(url, headers=get_headers(), params=params, timeout=60)
-
-        if response.status_code == 200:
-            results = response.json()
-            logger.info(f"✅ Downloaded { {json.dumps(results, indent=2)} }")
-            return results
-        elif response.status_code == 202:
-            logger.info(f"Snapshot {snapshot_id} still processing...")
-            return None
-        else:
-            logger.error(
-                f"Failed to download snapshot {snapshot_id}: {response.status_code} - {response.text}"
-            )
-            return None
+        response = requests.get(DOWNLOAD_API_URL, headers=headers)
+        return response
 
     except requests.exceptions.RequestException as e:
         logger.error(f"Error downloading snapshot {snapshot_id}: {e}")

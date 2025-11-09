@@ -4,6 +4,7 @@ Snapshot Service Core Logic
 Handles the main polling loop and processing of snapshot results.
 """
 
+import json
 import logging
 import time
 
@@ -71,38 +72,51 @@ def process_snapshot_for_bookmark(bookmark_id, snapshot_id, url):
     )
 
     # Download snapshot results
-    results = brightdata_client.download_snapshot_results(snapshot_id)
+    response = brightdata_client.download_snapshot_results(snapshot_id)
 
-    # Prepare updates dict with only non-None values
-    updates = {}
+    if response:
+        if response.status_code == 202:
+            logger.info(f"Snapshot {snapshot_id} still processing...")
+            return None
+        elif response.status_code == 200:
+            # Prepare updates dict with only non-None values
 
-    # Clear the snapshot_id since we're processing it now
-    updates["snapshot_id"] = None
+            results = response.json()
+            updates = {}
 
-    if not results:
-        logger.warning(f"⚠️  No results available for snapshot {snapshot_id}")
-    else:
-        # Process the first result (should only be one for the URL)
-        result_data = results[0] if isinstance(results, list) else results
+            # Clear the snapshot_id since it's done
+            updates["snapshot_id"] = None
 
-        # Determine service name from URL
-        service_name = "linkedin" if "linkedin.com" in url else "x"
-        processed = process_result(result_data, service_name)
+            logger.info(f"✅ Downloaded { {json.dumps(results, indent=2)} }")
+            if brightdata_client.check_download_for_errors(results):
+                # TODO: this could be simplified
+                for item in results:
+                    if "error" in item:
+                        logging.error(f"Error found: {item['error']}")
+                        logging.error(f"Error code: {item.get('error_code', 'N/A')}")
+                        updates["scrape_error"] = item["error"]
+            else:
+                # Process the first result (should only be one for the URL)
+                result_data = results[0] if isinstance(results, list) else results
 
-        logger.info(f"Extracted content for {url}")
-        logger.debug(f"  Content: {processed.get('content', '')[:100]}...")
+                # Determine service name from URL
+                service_name = "linkedin" if "linkedin.com" in url else "x"
+                processed = process_result(result_data, service_name)
 
-        if processed.get("content"):
-            updates["description"] = processed["content"]
-        if processed.get("preview_image_url"):
-            updates["preview_image_url"] = processed["preview_image_url"]
-        if processed.get("preview_video_url"):
-            updates["preview_video_url"] = processed["preview_video_url"]
-        if processed.get("social_profile_name"):
-            updates["social_profile_name"] = processed["social_profile_name"]
+                logger.info(f"Extracted content for {url}")
+                logger.debug(f"  Content: {processed.get('content', '')[:100]}...")
 
-    # Update the bookmark
-    result = supabase_client.update_bookmark(bookmark_id, updates)
+                if processed.get("content"):
+                    updates["description"] = processed["content"]
+                if processed.get("preview_image_url"):
+                    updates["preview_image_url"] = processed["preview_image_url"]
+                if processed.get("preview_video_url"):
+                    updates["preview_video_url"] = processed["preview_video_url"]
+                if processed.get("social_profile_name"):
+                    updates["social_profile_name"] = processed["social_profile_name"]
+
+            # Update the bookmark
+            result = supabase_client.update_bookmark(bookmark_id, updates)
 
     if result:
         logger.info(f"✅ Updated bookmark {bookmark_id} with snapshot data")
@@ -137,10 +151,7 @@ def poll_snapshots_once():
             continue
 
         try:
-            success = process_snapshot_for_bookmark(bookmark_id, snapshot_id, url)
-
-            if not success:
-                logger.warning(f"⚠️  Failed to process snapshot {snapshot_id}")
+            process_snapshot_for_bookmark(bookmark_id, snapshot_id, url)
 
         except Exception as e:
             logger.error(f"Error processing bookmark {bookmark_id}: {e}", exc_info=True)
