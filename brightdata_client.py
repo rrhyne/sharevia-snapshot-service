@@ -70,9 +70,7 @@ def download_snapshot_results(snapshot_id):
 
         if response.status_code == 200:
             results = response.json()
-            logger.info(
-                f"✅ Downloaded {len(results) if isinstance(results, list) else 1} results from snapshot {snapshot_id}"
-            )
+            logger.info(f"✅ Downloaded { {json.dumps(results, indent=2)} }")
             return results
         elif response.status_code == 202:
             logger.info(f"Snapshot {snapshot_id} still processing...")
