@@ -158,3 +158,48 @@ def extract_x_content(content_data):
             "preview_video_url": None,
             "social_profile_name": None,
         }
+
+
+def extract_instagram_content(content_data):
+    """Extract content, preview image/video from Instagram Brightdata response"""
+    if isinstance(content_data, dict):
+        content = (
+            content_data.get("post_text")
+            or content_data.get("text")
+            or content_data.get("headline")
+            or content_data.get("title")
+            or str(content_data)
+        )
+
+        # Check for video thumbnail first, then images
+        preview_image_url = content_data.get("video_thumbnail")
+        if not preview_image_url:
+            images = content_data.get("images", [])
+            preview_image_url = images[0] if images and len(images) > 0 else None
+
+        # Check for videos
+        preview_video_url = None
+        videos = content_data.get("videos")
+        if videos and len(videos) > 0:
+            video_obj = videos[0]
+            preview_video_url = (
+                video_obj.get("video_url")
+                if isinstance(video_obj, dict)
+                else video_obj
+            )
+
+        social_profile_name = content_data.get("user_id")
+
+        return {
+            "content": content,
+            "preview_image_url": preview_image_url,
+            "preview_video_url": preview_video_url,
+            "social_profile_name": social_profile_name,
+        }
+    else:
+        return {
+            "content": str(content_data),
+            "preview_image_url": None,
+            "preview_video_url": None,
+            "social_profile_name": None,
+        }

@@ -21,7 +21,7 @@ def process_result(result_data, service_name):
 
     Args:
         result_data (dict): The scraped data from Brightdata
-        service_name (str): 'x' or 'linkedin'
+        service_name (str): 'x', 'linkedin', or 'instagram'
 
     Returns:
         dict: Processed result with content, preview_image_url, preview_video_url, etc.
@@ -30,6 +30,8 @@ def process_result(result_data, service_name):
         processed = brightdata_client.extract_x_content(result_data)
     elif service_name == "linkedin":
         processed = brightdata_client.extract_linkedin_content(result_data)
+    elif service_name == "instagram":
+        processed = brightdata_client.extract_instagram_content(result_data)
     else:
         logger.warning(f"Unknown service name: {service_name}")
         return {
@@ -43,6 +45,12 @@ def process_result(result_data, service_name):
     if service_name == "x":
         logger.info(
             f"Processed X result: content={len(processed.get('content', ''))} chars, "
+            f"image={bool(processed.get('preview_image_url'))}, "
+            f"video={bool(processed.get('preview_video_url'))}"
+        )
+    elif service_name == "instagram":
+        logger.info(
+            f"Processed Instagram result: content={len(processed.get('content', ''))} chars, "
             f"image={bool(processed.get('preview_image_url'))}, "
             f"video={bool(processed.get('preview_video_url'))}"
         )
@@ -100,7 +108,12 @@ def process_snapshot_for_bookmark(bookmark_id, snapshot_id, url):
                 result_data = results[0] if isinstance(results, list) else results
 
                 # Determine service name from URL
-                service_name = "linkedin" if "linkedin.com" in url else "x"
+                if "linkedin.com" in url:
+                    service_name = "linkedin"
+                elif "instagram.com" in url:
+                    service_name = "instagram"
+                else:
+                    service_name = "x"
                 processed = process_result(result_data, service_name)
 
                 logger.info(f"Extracted content for {url}")
