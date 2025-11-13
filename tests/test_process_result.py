@@ -2,6 +2,7 @@
 Unit tests for process_result function using sample Brightdata data
 """
 
+import argparse
 import json
 import logging
 import sys
@@ -34,6 +35,12 @@ class TestProcessResult(unittest.TestCase):
         
         with open(samples_dir / "sample-linkedin-post.json", "r") as f:
             self.linkedin_sample = json.load(f)
+        
+        # Load all Instagram samples
+        self.instagram_samples = []
+        for instagram_file in sorted(samples_dir.glob("instagram_*.json")):
+            with open(instagram_file, "r") as f:
+                self.instagram_samples.append(json.load(f))
 
     def test_process_x_post(self):
         """Test processing an X (Twitter) post"""
@@ -132,7 +139,69 @@ class TestProcessResult(unittest.TestCase):
         
         logger.info("✅ LinkedIn image extraction test passed")
 
+    def test_process_instagram_post(self):
+        """Test processing Instagram posts"""
+        logger.info(f"Testing Instagram post processing with {len(self.instagram_samples)} samples")
+        
+        for idx, instagram_sample in enumerate(self.instagram_samples):
+            logger.info(f"Testing Instagram sample {idx + 1}")
+            
+            print("\n" + "="*80)
+            print(f"Instagram Sample {idx + 1} - INPUT DATA:")
+            print("="*80)
+            print(json.dumps(instagram_sample, indent=2))
+            
+            result = snapshot_service.process_result(instagram_sample, "instagram")
+            
+            print("\n" + "="*80)
+            print(f"Instagram Sample {idx + 1} - RESPONSE:")
+            print("="*80)
+            print(json.dumps(result, indent=2))
+            print("="*80 + "\n")
+            
+            # Verify the result has expected keys
+            self.assertIn("content", result)
+            self.assertIn("preview_image_url", result)
+            self.assertIn("social_profile_name", result)
+            
+            # Verify content extraction
+            self.assertIsNotNone(result["content"])
+            self.assertGreater(len(result["content"]), 0)
+            
+            # Verify social profile name
+            self.assertIsNotNone(result["social_profile_name"])
+            
+            logger.info(f"✅ Instagram sample {idx + 1} test passed - Profile: {result['social_profile_name']}")
+
 
 if __name__ == "__main__":
-    # Run tests with verbose output
-    unittest.main(verbosity=2)
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Test process_result function")
+    parser.add_argument(
+        "--service",
+        choices=["all", "x", "linkedin", "instagram"],
+        default="all",
+        help="Which service to test (default: all)"
+    )
+    args, remaining = parser.parse_known_args()
+    
+    # If specific service requested, filter tests
+    if args.service != "all":
+        suite = unittest.TestLoader().loadTestsFromTestCase(TestProcessResult)
+        filtered_suite = unittest.TestSuite()
+        
+        for test in suite:
+            test_name = test._testMethodName
+            if args.service == "x" and "x" in test_name.lower():
+                filtered_suite.addTest(test)
+            elif args.service == "linkedin" and "linkedin" in test_name.lower():
+                filtered_suite.addTest(test)
+            elif args.service == "instagram" and "instagram" in test_name.lower():
+                filtered_suite.addTest(test)
+        
+        # Run filtered tests
+        runner = unittest.TextTestRunner(verbosity=2)
+        runner.run(filtered_suite)
+    else:
+        # Run all tests with verbose output
+        unittest.main(argv=[''], verbosity=2, exit=True)

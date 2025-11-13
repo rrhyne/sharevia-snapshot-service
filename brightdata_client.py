@@ -82,6 +82,7 @@ def download_snapshot_results(snapshot_id):
 
     try:
         response = requests.get(DOWNLOAD_API_URL, headers=headers)
+        print(json.dumps(response.json(), indent=2))
         return response
 
     except requests.exceptions.RequestException as e:
@@ -162,33 +163,52 @@ def extract_x_content(content_data):
 
 def extract_instagram_content(content_data):
     """Extract content, preview image/video from Instagram Brightdata response"""
+    # Handle list response (Brightdata returns array)
+    if isinstance(content_data, list):
+        if len(content_data) > 0:
+            content_data = content_data[0]
+        else:
+            return {
+                "content": "",
+                "preview_image_url": None,
+                "preview_video_url": None,
+                "social_profile_name": None,
+            }
+    
     if isinstance(content_data, dict):
         content = (
-            content_data.get("post_text")
+            content_data.get("description")
+            or content_data.get("post_text")
             or content_data.get("text")
             or content_data.get("headline")
             or content_data.get("title")
-            or str(content_data)
+            or ""
         )
 
-        # Check for video thumbnail first, then images
-        preview_image_url = content_data.get("video_thumbnail")
+        # Start with thumbnail, then fall back to post_content
+        preview_image_url = content_data.get("thumbnail")
+        preview_video_url = None
+        
+        # Fall back to post_content array
         if not preview_image_url:
+            post_content = content_data.get("post_content", [])
+            if post_content and len(post_content) > 0:
+                first_item = post_content[0]
+                if isinstance(first_item, dict):
+                    item_type = first_item.get("type", "").lower()
+                    item_url = first_item.get("url")
+                    
+                    if item_type == "video":
+                        preview_video_url = item_url
+                    else:
+                        preview_image_url = item_url
+        
+        # Additional fallback to images array
+        if not preview_image_url and not preview_video_url:
             images = content_data.get("images", [])
             preview_image_url = images[0] if images and len(images) > 0 else None
 
-        # Check for videos
-        preview_video_url = None
-        videos = content_data.get("videos")
-        if videos and len(videos) > 0:
-            video_obj = videos[0]
-            preview_video_url = (
-                video_obj.get("video_url")
-                if isinstance(video_obj, dict)
-                else video_obj
-            )
-
-        social_profile_name = content_data.get("user_id")
+        social_profile_name = content_data.get("user_posted") or content_data.get("user_id")
 
         return {
             "content": content,
@@ -198,7 +218,7 @@ def extract_instagram_content(content_data):
         }
     else:
         return {
-            "content": str(content_data),
+            "content": "",
             "preview_image_url": None,
             "preview_video_url": None,
             "social_profile_name": None,
